@@ -1,0 +1,129 @@
+# Bearper-2018119144
+嵌入式技术-单片机
+
+//初始化定时器2
+void timer2_pwm_init(uint32_t psr, uint32_t arr, uint32_t duty)
+{
+	/* 定义一个定时器初始化结构体 */
+	timer_parameter_struct timer_init_struct;
+	/* 定义一个定时器输出比较参数结构体*/
+	timer_oc_parameter_struct timer_oc_init_struct;
+	
+	/* 开启定时器时钟 */
+	rcu_periph_clock_enable(RCU_TIMER2);
+	/* 开启GPIOB时钟 */
+	rcu_periph_clock_enable(RCU_GPIOB);
+	/* 开启复用功能时钟 */
+    rcu_periph_clock_enable(RCU_AF);
+
+    /* 初始化PB0(TIMER2 CH2)为复用功能 */
+    gpio_init(GPIOB,GPIO_MODE_AF_PP,GPIO_OSPEED_50MHZ,GPIO_PIN_0);
+	
+	/* 初始化定时器 */
+	timer_deinit(TIMER2);
+	timer_init_struct.prescaler			= psr;	/* 预分频系数 */
+	timer_init_struct.period			= arr;	/* 自动重装载值 */
+	timer_init_struct.alignedmode		= TIMER_COUNTER_EDGE;	/* 计数器对齐模式，边沿对齐 */
+	timer_init_struct.counterdirection	= TIMER_COUNTER_UP;		/* 计数器计数方向，向上 */
+	timer_init_struct.clockdivision		= TIMER_CKDIV_DIV1;		/* DTS时间分频值  */
+	timer_init_struct.repetitioncounter = 0;					/* 重复计数器的值（定时器2无效）*/
+	timer_init(TIMER2, &timer_init_struct);
+	
+	/* PWM初始化 */
+	timer_oc_init_struct.outputstate  = TIMER_CCX_ENABLE;		/* 通道使能 */
+    timer_oc_init_struct.outputnstate = TIMER_CCXN_DISABLE;		/* 通道互补输出使能（定时器2无效） */
+    timer_oc_init_struct.ocpolarity   = TIMER_OC_POLARITY_HIGH;	/* 通道极性 */
+    timer_oc_init_struct.ocnpolarity  = TIMER_OCN_POLARITY_HIGH;/* 互补通道极性（定时器2无效）*/
+    timer_oc_init_struct.ocidlestate  = TIMER_OC_IDLE_STATE_LOW;/* 通道空闲状态输出（定时器2无效）*/
+    timer_oc_init_struct.ocnidlestate = TIMER_OCN_IDLE_STATE_LOW;/*互补通道空闲状态输出（定时器2无效） */
+	timer_channel_output_config(TIMER2, TIMER_CH_2, &timer_oc_init_struct);
+	
+	/* 通道2占空比设置 */
+    timer_channel_output_pulse_value_config(TIMER2, TIMER_CH_2, duty);
+	/* PWM模式0 */
+    timer_channel_output_mode_config(TIMER2,TIMER_CH_2,TIMER_OC_MODE_PWM0);
+	/* 不使用输出比较影子寄存器 */
+    timer_channel_output_shadow_config(TIMER2,TIMER_CH_2,TIMER_OC_SHADOW_DISABLE);	
+	/* 自动重装载影子比较器使能 */
+    timer_auto_reload_shadow_enable(TIMER2);	
+	/* 使能Timer2 */
+	timer_enable(TIMER2);
+}
+
+
+
+/*****************************************************************************************/
+/*****************************************************************************************/
+//mian函数
+int main(void)
+{
+	uint8_t dir = 0;
+	uint32_t pwmval = 300;
+	/* 配置系统时钟 */
+	systick_config();
+	/* 初始化LED */
+	// led_init();
+	/* 初始化USART0 */
+	uart0_init(115200);
+	/* 初始化定时器5 */
+	timer2_pwm_init(120-1, 1000-1, 300);
+	
+	/* 通过串口打印 Hello world! */
+	u1_printf("Hello world! ");
+	u1_printf("I am William. \r\n");
+	
+	TIMER_CH2CV(TIMER2) =  pwmval;
+
+    while(1)
+	{
+		if(dir) pwmval++;				// dir==1  pwmval递增
+		else pwmval--;				    // dir==0  pwmval递减
+		if( pwmval>500 ) dir=0;			// pwmval到达500后，方向为递减
+		if( pwmval==0 ) dir=1;			// pwmval递减到0后，方向改为递增
+		TIMER_CH2CV(TIMER2) =  pwmval; 	// 修改比较值，修改占空比
+        if( pwmval==0 ) delay_1ms(300);
+		delay_1ms(3);
+	}
+}
+
+
+/*****************************************************************************************/
+/*****************************************************************************************/
+//添加中断
+	/* 初始化定时器5为3ms产生中断*/
+	timer5_init(1200-1, 300-1);
+  
+  
+ /*****************************************************************************************/
+/*****************************************************************************************/ 
+//定时器5 的中断服务函数
+void TIMER5_IRQHandler(void)
+{
+	static uint8_t led_flag = 1, dir = 0;;
+	static uint32_t pwmval = 300;
+	if(timer_interrupt_flag_get(TIMER5, TIMER_INT_FLAG_UP))
+	{
+		/* 清除TIMER5 中断标志位 */
+		timer_interrupt_flag_clear(TIMER5, TIMER_INT_FLAG_UP);
+		if(led_flag == 1)
+		{
+			if(dir) pwmval++;				/* dir==1  pwmval递增				*/
+			else pwmval--;				    /* dir==0  pwmval递减				*/
+			if( pwmval>500 ) dir=0;			/* pwmval到达500后，方向为递减		*/
+			if( pwmval==0 ) dir=1;			/* pwmval递减到0后，方向改为递增	*/
+			TIMER_CH2CV(TIMER2) =  pwmval; 	/* 修改比较值，修改占空比			*/
+			if( pwmval==0 )
+			{
+				led_flag = 0;
+				timer_counter_value_config(TIMER5, 30000-1);	/* 设置为300ms */
+			}
+		}
+		else
+		{
+			led_flag = 1;
+			timer_counter_value_config(TIMER5, 300-1);	/* 设置为3ms */
+		}
+	}
+}
+
+
