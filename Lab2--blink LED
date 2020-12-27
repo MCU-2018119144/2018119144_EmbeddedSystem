@@ -16,7 +16,7 @@ int main(void)
  
   while (1)
   {
-	HAL_Delay(400);                                 //每隔200毫秒翻转一次LED引脚的电平，使LED灯达到闪烁的效果
+	HAL_Delay(400);                                 //每隔400毫秒翻转一次LED引脚的电平，使LED灯达到闪烁的效果
 	HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);         //设置输出引脚，点亮LED
   }
 }
